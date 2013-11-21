@@ -9,6 +9,7 @@ bc = api.BTCChina()
 
 PRICE_LENGTH = 30
 THRESHOLD_VALUE = 0.005
+CHANGE_RATE = 0.1
 
 btc_balance = {}
 cny_balance = {}
@@ -50,13 +51,21 @@ def legal_number(num):
 
 def buy(percent, price):
     btc_amount = cny_balance['amount'] * percent / price
-    return bc.buy(legal_number(price), legal_number(btc_amount))
+    try:
+        bc.buy(legal_number(price), legal_number(btc_amount))
+    except:
+        pass
+    return
 
 
 def sell(percent, price):
     btc_amount = btc_balance['amount'] * percent
     log("[sell]%f,%f" % (btc_amount, price))
-    return bc.sell(legal_number(price), legal_number(btc_amount))
+    if btc_amount:
+        try:
+            bc.sell(legal_number(price), legal_number(btc_amount))
+        except:
+            pass
 
 
 def cancel_current_orders():
@@ -120,18 +129,23 @@ def calculate_delta_rate(old_val, new_val):
 def buy_decrease():
     global current_price, last_update_time, current_value
     while True:
-        current_price = get_price_from_depth()
+        try:
+            current_price = get_price_from_depth()
+        except:
+            time.sleep(10)
+            continue
         append_price(current_price)
         log(current_price)
         if is_decreasing():
             log("[decrease]buy")
-            buy(0.1, current_price)
+            buy(CHANGE_RATE, current_price)
         elif is_increasing():
             log("[increase]sell")
-            sell(0.1, current_price)
+            sell(CHANGE_RATE, current_price)
         else:
             log("nothing")
         if datetime.now() - last_update_time > timedelta(hours=0.5):
+            cancel_current_orders()
             update_balance()
             current_value = calculate_value()
             log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value))

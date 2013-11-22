@@ -22,10 +22,11 @@ initial_time = datetime.now()
 last_update_time = initial_time
 
 
-def log(txt):
+def log(txt, level='info'):
     f = file('log.txt', 'a+')
     content = '%s:%s' % (str(datetime.now()), txt)
-    print content
+    if level != 'info':
+        print content
     f.write(content + "\n")
     f.close()
 
@@ -137,11 +138,11 @@ def buy_decrease():
         append_price(current_price)
         log(current_price)
         if is_decreasing():
-            log("[decrease]buy")
+            log("[decrease]buy", 'warning')
             update_balance()
             buy(CHANGE_RATE, current_price)
         elif is_increasing():
-            log("[increase]sell")
+            log("[increase]sell", 'warning')
             update_balance()
             sell(CHANGE_RATE, current_price)
         else:
@@ -150,7 +151,7 @@ def buy_decrease():
             cancel_current_orders()
             update_balance()
             current_value = calculate_value()
-            log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value))
+            log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value), 'warning')
             last_update_time = datetime.now()
         time.sleep(10)
 
@@ -166,11 +167,11 @@ def buy_increase():
         append_price(current_price)
         log(current_price)
         if is_decreasing():
-            log("[decrease]buy")
+            log("[decrease]sell", 'warning')
             update_balance()
             sell(CHANGE_RATE, current_price)
         elif is_increasing():
-            log("[increase]sell")
+            log("[increase]sell", 'warning')
             update_balance()
             buy(CHANGE_RATE, current_price)
         else:
@@ -179,7 +180,7 @@ def buy_increase():
             cancel_current_orders()
             update_balance()
             current_value = calculate_value()
-            log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value))
+            log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value), 'warning')
             last_update_time = datetime.now()
         time.sleep(10)
 
@@ -187,5 +188,5 @@ if __name__ == "__main__":
     update_balance()
     current_price = get_price_from_depth()
     initial_value = calculate_value()
-    log("[begin]now the value is %f" % initial_value)
+    log("[begin]now the value is %f" % initial_value, 'warning')
     buy_increase()

@@ -8,13 +8,19 @@ import api
 bc = api.BTCChina()
 
 PRICE_LENGTH = 30
-THRESHOLD_VALUE = 0.005
-CHANGE_RATE = 0.1
+SINGLE_THRESHOLD_CHANGE = 0.002
+MULTI_THRESHOLD_CHANGE = 0.01
+LITTLE_CHANGE_RATE = 0.1#每次出货进货的量
+MEDIUM_CHANGE_RATE = 0.2#每次出货进货的量
+HIGH_CHANGE_RATE = 0.3#每次出货进货的量
+DETECT_GAP = 5
 
 btc_balance = {}
 cny_balance = {}
 current_value = 0  #当前价值
 price_history = [] #价格历史
+history_change = [] #历史上的变动
+
 current_price = 0
 current_value = 0
 initial_value = 0 #最初价钱
@@ -33,7 +39,10 @@ def log(txt, level='info'):
 
 def update_balance():
     global btc_balance, cny_balance
-    account_info = bc.get_account_info()
+    try:
+        account_info = bc.get_account_info()
+    except:
+        account_info = None
     if account_info:
         btc_balance = account_info['balance']['btc']
         btc_balance['amount'] = float(btc_balance['amount'])
@@ -50,8 +59,10 @@ def calculate_value():
 def legal_number(num):
     return "%.4f" % num
 
+
 def buy(percent, price):
     btc_amount = cny_balance['amount'] * percent / price
+    log("[sell]%f,%f" % (btc_amount, price), 'warning')
     try:
         bc.buy(legal_number(price), legal_number(btc_amount))
     except:
@@ -61,7 +72,7 @@ def buy(percent, price):
 
 def sell(percent, price):
     btc_amount = btc_balance['amount'] * percent
-    log("[sell]%f,%f" % (btc_amount, price))
+    log("[sell]%f,%f" % (btc_amount, price), 'warning')
     if btc_amount:
         try:
             bc.sell(legal_number(price), legal_number(btc_amount))
@@ -71,10 +82,12 @@ def sell(percent, price):
 
 def cancel_current_orders():
     orders = bc.get_orders()
+    now = time.time()
     for order in orders['order']:
-        id = order['id']
-        print "cancel order:%s" % id
-        bc.cancel(id)
+        if now - order['date'] > 300:
+            _id = order['id']
+            log("cancel order:%s" % _id)
+            bc.cancel(_id)
 
 
 def get_price_from_depth():
@@ -84,7 +97,9 @@ def get_price_from_depth():
     for order in depth['market_depth']['ask']:
         total += order['price'] * order['amount']
         amount += order['amount']
-    return total / amount
+    price =  total / amount
+    log(price)
+    return price
 
 
 def append_price(price):
@@ -96,6 +111,20 @@ def append_price(price):
         price_history.append(price)
 
 
+def append_change_history(change):
+    global history_change
+    if len(history_change) < 10:
+        history_change.append(change)
+    else:
+        history_change = history_change[1:]
+        history_change.append(change)
+
+def multi_change():
+    result = 1
+    for change in history_change:
+        result *= change
+    return  result
+
 def is_decreasing():
     if len(price_history) > PRICE_LENGTH / 5:
         total = 0
@@ -104,7 +133,7 @@ def is_decreasing():
             total += price_history[i]
         old_price = total / count
         if current_price < old_price:
-            if (-1 * calculate_delta_rate(old_price, current_price)) > THRESHOLD_VALUE:
+            if (-1 * calculate_delta_rate(old_price, current_price)) > SINGLE_THRESHOLD_CHANGE:
                 return True
     return False
 
@@ -117,7 +146,7 @@ def is_increasing():
             total += price_history[i]
         old_price = total / count
         if current_price > old_price:
-            if calculate_delta_rate(old_price, current_price) > THRESHOLD_VALUE:
+            if calculate_delta_rate(old_price, current_price) > SINGLE_THRESHOLD_CHANGE:
                 return True
     return False
 
@@ -133,20 +162,20 @@ def buy_decrease():
         try:
             current_price = get_price_from_depth()
         except:
+            log('get price fail', 'warning')
             time.sleep(10)
             continue
         append_price(current_price)
-        log(current_price)
         if is_decreasing():
             log("[decrease]buy", 'warning')
             update_balance()
-            buy(CHANGE_RATE, current_price)
+            buy(LITTLE_CHANGE_RATE, current_price)
         elif is_increasing():
             log("[increase]sell", 'warning')
             update_balance()
-            sell(CHANGE_RATE, current_price)
+            sell(LITTLE_CHANGE_RATE, current_price)
         else:
-            log("nothing")
+            log("nothing", 'warning')
         if datetime.now() - last_update_time > timedelta(hours=0.5):
             cancel_current_orders()
             update_balance()
@@ -165,28 +194,82 @@ def buy_increase():
             time.sleep(10)
             continue
         append_price(current_price)
-        log(current_price)
         if is_decreasing():
             log("[decrease]sell", 'warning')
             update_balance()
-            sell(CHANGE_RATE, current_price)
+            sell(LITTLE_CHANGE_RATE, current_price)
         elif is_increasing():
-            log("[increase]sell", 'warning')
+            log("[increase]buy", 'warning')
             update_balance()
-            buy(CHANGE_RATE, current_price)
+            buy(LITTLE_CHANGE_RATE, current_price)
         else:
-            log("nothing")
+            log("nothing", 'warning')
         if datetime.now() - last_update_time > timedelta(hours=0.5):
             cancel_current_orders()
             update_balance()
             current_value = calculate_value()
             log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value), 'warning')
             last_update_time = datetime.now()
-        time.sleep(10)
+        time.sleep(5)
+
+
+def triple_step_buy_increase():
+    global current_price, last_update_time, current_value
+    count = 0
+    price_list = []
+    old_price = 0
+    while True:
+        try:
+            current_price = get_price_from_depth()
+        except:
+            log("get price failed")
+            time.sleep(DETECT_GAP)
+            continue
+        price_list.append(current_price)
+        count += 1
+        if count % 3 == 0:
+            avg_price = (price_list[0] + price_list[1] + price_list[2]) / 3
+            price_list = []
+            log("average_price: %.4f" % avg_price, 'warning')
+            if old_price != 0:
+                change_rate = avg_price / old_price
+                append_change_history(change_rate)
+                total_change = multi_change()
+                print "change:%f, multichange:%f" % (change_rate, total_change)
+                if change_rate > 1 + SINGLE_THRESHOLD_CHANGE:
+                    if total_change > 1 + MULTI_THRESHOLD_CHANGE:
+                        buy(LITTLE_CHANGE_RATE, current_price)
+                    elif total_change < 1 - MULTI_THRESHOLD_CHANGE:
+                        buy(HIGH_CHANGE_RATE, current_price)
+                    else:
+                        buy(MEDIUM_CHANGE_RATE, current_price)
+                elif change_rate < 1 - SINGLE_THRESHOLD_CHANGE:
+                    if total_change > 1 + MULTI_THRESHOLD_CHANGE:
+                        sell(HIGH_CHANGE_RATE, current_price)
+                    elif total_change < 1 - MULTI_THRESHOLD_CHANGE:
+                        buy(LITTLE_CHANGE_RATE, current_price)
+                    else:
+                        buy(MEDIUM_CHANGE_RATE, current_price)
+                else:
+                    if total_change > 1 + MULTI_THRESHOLD_CHANGE:
+                        sell(LITTLE_CHANGE_RATE, current_price)
+                    elif total_change < 1 - MULTI_THRESHOLD_CHANGE:
+                        buy(LITTLE_CHANGE_RATE, current_price)
+                    else:
+                        log("nothing todo")
+            old_price = avg_price
+            if datetime.now() - last_update_time > timedelta(hours=0.5):
+                cancel_current_orders()
+                update_balance()
+                current_value = calculate_value()
+                log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value), 'warning')
+                last_update_time = datetime.now()
+        time.sleep(5)
+
 
 if __name__ == "__main__":
     update_balance()
     current_price = get_price_from_depth()
     initial_value = calculate_value()
     log("[begin]now the value is %f" % initial_value, 'warning')
-    buy_increase()
+    triple_step_buy_increase()

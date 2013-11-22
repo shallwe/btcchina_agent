@@ -138,10 +138,41 @@ def buy_decrease():
         log(current_price)
         if is_decreasing():
             log("[decrease]buy")
+            update_balance()
             buy(CHANGE_RATE, current_price)
         elif is_increasing():
             log("[increase]sell")
+            update_balance()
             sell(CHANGE_RATE, current_price)
+        else:
+            log("nothing")
+        if datetime.now() - last_update_time > timedelta(hours=0.5):
+            cancel_current_orders()
+            update_balance()
+            current_value = calculate_value()
+            log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value))
+            last_update_time = datetime.now()
+        time.sleep(10)
+
+
+def buy_increase():
+    global current_price, last_update_time, current_value
+    while True:
+        try:
+            current_price = get_price_from_depth()
+        except:
+            time.sleep(10)
+            continue
+        append_price(current_price)
+        log(current_price)
+        if is_decreasing():
+            log("[decrease]buy")
+            update_balance()
+            sell(CHANGE_RATE, current_price)
+        elif is_increasing():
+            log("[increase]sell")
+            update_balance()
+            buy(CHANGE_RATE, current_price)
         else:
             log("nothing")
         if datetime.now() - last_update_time > timedelta(hours=0.5):
@@ -157,4 +188,4 @@ if __name__ == "__main__":
     current_price = get_price_from_depth()
     initial_value = calculate_value()
     log("[begin]now the value is %f" % initial_value)
-    buy_decrease()
+    buy_increase()

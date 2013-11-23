@@ -81,7 +81,10 @@ def sell(percent, price):
 
 
 def cancel_current_orders():
-    orders = bc.get_orders()
+    try:
+        orders = bc.get_orders()
+    except:
+        orders = {'order':[]}
     now = time.time()
     for order in orders['order']:
         if now - order['date'] > 300:
@@ -256,9 +259,9 @@ def triple_step_buy_increase():
                     if total_change > 1 + MULTI_THRESHOLD_CHANGE:
                         sell(HIGH_CHANGE_RATE, current_price)
                     elif total_change < 1 - MULTI_THRESHOLD_CHANGE:
-                        buy(LITTLE_CHANGE_RATE, current_price)
+                        sell(LITTLE_CHANGE_RATE, current_price)
                     else:
-                        buy(MEDIUM_CHANGE_RATE, current_price)
+                        sell(MEDIUM_CHANGE_RATE, current_price)
                 else:
                     if total_change > 1 + MULTI_THRESHOLD_CHANGE:
                         sell(LITTLE_CHANGE_RATE, current_price)

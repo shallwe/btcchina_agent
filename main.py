@@ -10,9 +10,9 @@ bc = api.BTCChina()
 PRICE_LENGTH = 30
 SINGLE_THRESHOLD_CHANGE = 0.002
 MULTI_THRESHOLD_CHANGE = 0.01
-LITTLE_CHANGE_RATE = 0.1#每次出货进货的量
-MEDIUM_CHANGE_RATE = 0.2#每次出货进货的量
-HIGH_CHANGE_RATE = 0.3#每次出货进货的量
+LITTLE_CHANGE_RATE = 0.05#每次出货进货的量
+MEDIUM_CHANGE_RATE = 0.1#每次出货进货的量
+HIGH_CHANGE_RATE = 0.2#每次出货进货的量
 DETECT_GAP = 5
 
 btc_balance = {}
@@ -62,7 +62,7 @@ def legal_number(num):
 
 def buy(percent, price):
     btc_amount = cny_balance['amount'] * percent / price
-    log("[sell]%f,%f" % (btc_amount, price), 'warning')
+    log("[buy]%f,%f" % (btc_amount, price), 'warning')
     try:
         bc.buy(legal_number(price), legal_number(btc_amount))
     except:
@@ -113,7 +113,7 @@ def append_price(price):
 
 def append_change_history(change):
     global history_change
-    if len(history_change) < 10:
+    if len(history_change) < 20:
         history_change.append(change)
     else:
         history_change = history_change[1:]
@@ -213,6 +213,12 @@ def buy_increase():
         time.sleep(5)
 
 
+def calculate_averate(arr):
+    total = 0
+    for i in arr:
+        total += i
+    return total / len(arr)
+
 def triple_step_buy_increase():
     global current_price, last_update_time, current_value
     count = 0
@@ -227,10 +233,10 @@ def triple_step_buy_increase():
             continue
         price_list.append(current_price)
         count += 1
-        if count % 3 == 0:
-            avg_price = (price_list[0] + price_list[1] + price_list[2]) / 3
+        if count % 5 == 0:
+            avg_price = calculate_averate(price_list)
             price_list = []
-            log("average_price: %.4f" % avg_price, 'warning')
+            log("average_price: %.4f" % avg_price)
             if old_price != 0:
                 change_rate = avg_price / old_price
                 append_change_history(change_rate)
@@ -267,7 +273,7 @@ def triple_step_buy_increase():
                 current_value = calculate_value()
                 log("[effect]current the rate is %f" % calculate_delta_rate(initial_value, current_value), 'warning')
                 last_update_time = datetime.now()
-        time.sleep(5)
+        time.sleep(10)
 
 
 if __name__ == "__main__":
